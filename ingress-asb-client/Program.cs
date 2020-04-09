@@ -29,7 +29,8 @@ namespace ingress_asb_client
             {
                 logging.AddConfiguration(config.GetSection("Logging"));
                 logging.AddConsole();
-                logging.AddFile("Logs/myapp-{Date}.txt");
+                var logDirectory = config.GetValue<string>("Runtime:LogOutputDirectory");
+                logging.AddFile(logDirectory);
             }).Configure<LoggerFilterOptions>(options => options.MinLevel = LogLevel.Information);
 
             // required to run the application

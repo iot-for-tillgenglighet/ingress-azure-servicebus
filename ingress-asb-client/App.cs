@@ -22,6 +22,5 @@ namespace ingress_asb_client
 
             Console.WriteLine("Hello from App.cs");
         }
-
     }
 }
