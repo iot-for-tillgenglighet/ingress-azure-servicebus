@@ -3,6 +3,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Ingress.Asb.Worker.Models;
+
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
@@ -15,12 +17,14 @@ namespace Ingress.Asb.Worker
         private readonly ILogger<ServiceBusClient> _logger;
         private readonly IConfiguration _configuration;
         private ISubscriptionClient _subscriptionClient;
+        private readonly IRabbitMQClient _rabbitMQClient;
 
-        public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient)
+        public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient, IRabbitMQClient rabbitMQClient)
         {
             _logger = logger;
             _configuration = configuration;
             _subscriptionClient = subscriptionClient;
+            _rabbitMQClient = rabbitMQClient;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -57,6 +61,9 @@ namespace Ingress.Asb.Worker
             // Process the message.
             Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{Encoding.UTF8.GetString(message.Body)}");
 
+            IIoTHubMessage iotHubMessage = ConvertToIotHubMessage(message);
+            _rabbitMQClient.PostMessage(iotHubMessage);
+
             // Complete the message so that it is not received again.
             // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
             await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
@@ -64,6 +71,11 @@ namespace Ingress.Asb.Worker
             // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
             // If subscriptionClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
             // to avoid unnecessary exceptions.
+        }
+
+        private IIoTHubMessage ConvertToIotHubMessage(Message message)
+        {
+            throw new NotImplementedException();
         }
 
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
