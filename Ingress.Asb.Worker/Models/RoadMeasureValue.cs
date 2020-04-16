@@ -2,11 +2,18 @@
 {
     public class RoadMeasureValue : IoTHubMessage
     {
-        public int Humidity { get; }
+        public string SurfaceType { get; }
+        public string Status { get; }
+        public string Accuracy { get; }
+        public string Angle { get; }
 
-        public RoadMeasureValue(IoTHubMessageOrigin origin, string timestamp, int humidity) : base(origin, timestamp, "telemetry.roadmeasurevalue")
+
+        public RoadMeasureValue(IoTHubMessageOrigin origin, string timestamp, string surfaceType, string status, string accuracy, string angle) : base(origin, timestamp, "telemetry.roadmeasurevalue")
         {
-            Humidity = humidity;
+            SurfaceType = surfaceType;
+            Status = status;
+            Accuracy = accuracy;
+            Angle = angle;
         }
     }
 

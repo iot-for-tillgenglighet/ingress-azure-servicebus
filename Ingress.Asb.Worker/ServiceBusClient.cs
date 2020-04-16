@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ using Microsoft.Azure.ServiceBus;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace Ingress.Asb.Worker
 {
@@ -75,7 +77,25 @@ namespace Ingress.Asb.Worker
 
         private IIoTHubMessage ConvertToIotHubMessage(Message message)
         {
-            throw new NotImplementedException();
+            string json = Encoding.UTF8.GetString(message.Body);
+
+            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
+
+            double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
+            double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
+
+            // Todo: Borde inte device ingå i JSON message?
+            IoTHubMessageOrigin origin = new IoTHubMessageOrigin("device", latitude, longitude);
+            // Todo: Är tidstämpeln UTC eller lokaltid?
+            RoadMeasureValue roadMeasureValue = new RoadMeasureValue(origin, roadAvailabilityModel.Created.ToString(), GetSurfaceType(roadAvailabilityModel), roadAvailabilityModel.Position.Status.ToString(), roadAvailabilityModel.Position.Accuracy, roadAvailabilityModel.Position.Angle);
+
+            return roadMeasureValue;
+        }
+
+        private string GetSurfaceType(RoadAvailabilityModel roadAvailabilityModel)
+        {
+            var probability = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
+            return probability.TagName;
         }
 
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
