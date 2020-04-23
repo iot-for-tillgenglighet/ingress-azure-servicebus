@@ -1,0 +1,28 @@
+version: "3"
+services:
+  postgresdb:
+    image: "iot-for-tillgenglighet/testdb-postgres:latest"
+    build:
+      context: ..
+      dockerfile: ./test/database/testdb-dockerfile
+    restart: always
+    environment:
+      POSTGRES_DB: "problemreport"
+      POSTGRES_USER: "testuser"
+      POSTGRES_PASSWORD: "testpass"
+    ports:
+      - "5432:5432"
+
+  rabbitmq:
+    image: "bitnami/rabbitmq:3.8"
+    ports:
+      - "4369:4369"
+      - "5672:5672"
+      - "25672:25672"
+      - "15672:15672"
+    volumes:
+      - "rabbitmq_data:/bitnami"
+
+volumes:
+  rabbitmq_data:
+    driver: local
