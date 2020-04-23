@@ -1,3 +1,5 @@
+using System;
+
 using Ingress.Asb.Worker;
 
 using Microsoft.AspNetCore.Builder;
@@ -22,7 +24,16 @@ namespace Ingress.Asb.Webapi
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddControllers();
-            services.AddSingleton<ISubscriptionClient>(new SubscriptionClient(Configuration["Connectionstring"], Configuration["TopicName"], Configuration["SubscriptionName"]));
+
+            //string connectionString = Configuration["Connectionstring"];
+            //string topicPath = Configuration["TopicName"];
+            //string subscriptionName = Configuration["SubscriptionName"];
+
+            string connectionString = Environment.GetEnvironmentVariable("Connectionstring");
+            string topicPath = Environment.GetEnvironmentVariable("TopicName");
+            string subscriptionName = Environment.GetEnvironmentVariable("SubscriptionName");
+
+            services.AddSingleton((ISubscriptionClient)new SubscriptionClient(connectionString, topicPath, subscriptionName));
             services.AddSingleton<IRabbitMQClient, RabbitMQClient>();
         }
 

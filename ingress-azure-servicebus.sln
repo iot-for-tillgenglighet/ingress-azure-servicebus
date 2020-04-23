@@ -3,9 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30002.166
 MinimumVisualStudioVersion = 15.0.26124.0
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ingress.Asb.Webapi", "Ingress.Asb.Webapi\Ingress.Asb.Webapi.csproj", "{F03C3136-E1F9-4D7F-9738-88CCC25BCDD7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ingress.Asb.Webapi", "Ingress.Asb.Webapi\Ingress.Asb.Webapi.csproj", "{F03C3136-E1F9-4D7F-9738-88CCC25BCDD7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ingress.Asb.Worker", "Ingress.Asb.Worker\Ingress.Asb.Worker.csproj", "{3F17704B-8616-41EE-846F-71885C53F821}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ingress.Asb.Worker", "Ingress.Asb.Worker\Ingress.Asb.Worker.csproj", "{3F17704B-8616-41EE-846F-71885C53F821}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ingress.Asb.Test", "Ingress.Asb.Test\Ingress.Asb.Test.csproj", "{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -41,6 +43,18 @@ Global
 		{3F17704B-8616-41EE-846F-71885C53F821}.Release|x64.Build.0 = Release|Any CPU
 		{3F17704B-8616-41EE-846F-71885C53F821}.Release|x86.ActiveCfg = Release|Any CPU
 		{3F17704B-8616-41EE-846F-71885C53F821}.Release|x86.Build.0 = Release|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Debug|x64.Build.0 = Debug|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Debug|x86.Build.0 = Debug|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Release|x64.ActiveCfg = Release|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Release|x64.Build.0 = Release|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Release|x86.ActiveCfg = Release|Any CPU
+		{5ACCDF32-7D81-4F9C-B106-91769A3DB00C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
