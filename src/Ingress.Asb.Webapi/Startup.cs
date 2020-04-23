@@ -29,9 +29,9 @@ namespace Ingress.Asb.Webapi
             //string topicPath = Configuration["TopicName"];
             //string subscriptionName = Configuration["SubscriptionName"];
 
-            string connectionString = Environment.GetEnvironmentVariable("Connectionstring");
-            string topicPath = Environment.GetEnvironmentVariable("TopicName");
-            string subscriptionName = Environment.GetEnvironmentVariable("SubscriptionName");
+            string connectionString = Environment.GetEnvironmentVariable("AZURESERVICEBUS_CONNECTIONSTRING");
+            string topicPath = Environment.GetEnvironmentVariable("AZURESERVICEBUS_TOPICNAME");
+            string subscriptionName = Environment.GetEnvironmentVariable("AZURESERVICEBUS_SUBSCRIPTIONNAME");
 
             services.AddSingleton((ISubscriptionClient)new SubscriptionClient(connectionString, topicPath, subscriptionName));
             services.AddSingleton<IRabbitMQClient, RabbitMQClient>();
