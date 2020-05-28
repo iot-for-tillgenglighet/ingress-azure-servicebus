@@ -16,6 +16,7 @@ namespace Ingress.Asb.Worker
         private IModel _rmqModel;
         private const string _exchangeName = "iot-msg-exchange-topic";
         private JsonSerializerSettings _serializerSettings;
+        private bool _debugEnvironment = false;
 
         public RabbitMQClient()
         {
@@ -24,7 +25,6 @@ namespace Ingress.Asb.Worker
 
         public void Initialize()
         {
-            bool debugEnvironment = false;
 
             try
             {
@@ -49,13 +49,13 @@ namespace Ingress.Asb.Worker
                 }
                 else
                 {
-                    debugEnvironment = true;
+                    _debugEnvironment = true;
                 }
             }
             catch (Exception e)
             {
                 Console.WriteLine($"RabbitMQ Exception: {e.Message}");
-                if (debugEnvironment == false)
+                if (_debugEnvironment == false)
                 {
                     System.Environment.Exit(1);
                 }
@@ -65,7 +65,7 @@ namespace Ingress.Asb.Worker
 
         public void PostMessage(IIoTHubMessage message)
         {
-            if (message != null)
+            if (message != null && !_debugEnvironment)
             {
                 string json = JsonConvert.SerializeObject(message, _serializerSettings);
                 byte[] messageBodyBytes = Encoding.UTF8.GetBytes(json);
