@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Http;
 
 using Ingress.Asb.Worker.Models;
 
@@ -19,14 +20,13 @@ namespace Ingress.Asb.Worker
         private readonly ILogger<ServiceBusClient> _logger;
         private readonly IConfiguration _configuration;
         private ISubscriptionClient _subscriptionClient;
-        private readonly IRabbitMQClient _rabbitMQClient;
-
-        public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient, IRabbitMQClient rabbitMQClient)
+        private readonly IHttpClientFactory _httpClientFactory;
+        public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient, IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _configuration = configuration;
             _subscriptionClient = subscriptionClient;
-            _rabbitMQClient = rabbitMQClient;
+            _httpClientFactory = httpClientFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -58,13 +58,30 @@ namespace Ingress.Asb.Worker
             _subscriptionClient.RegisterMessageHandler(ProcessMessagesAsync, messageHandlerOptions);
         }
 
-        private async Task ProcessMessagesAsync(Message message, CancellationToken token)
+private async Task ProcessMessagesAsync(Message message, CancellationToken token)
         {
+            string json = Encoding.UTF8.GetString(message.Body);
             // Process the message.
-            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{Encoding.UTF8.GetString(message.Body)}");
+            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{json}");
 
-            IIoTHubMessage iotHubMessage = ConvertToIotHubMessage(message);
-            _rabbitMQClient.PostMessage(iotHubMessage);
+            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
+
+            double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
+            double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
+
+            //var baseUrl = Environment.GetEnvironmentVariable("BASE_URL");
+
+            int distance = 30;
+
+            string newUrl = $"https://iotsundsvall.se/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
+
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.GetAsync(newUrl);
+ 
+            if (response.IsSuccessStatusCode)
+            {
+                var result = response.Content.ReadAsStreamAsync().Result;
+            }
 
             // Complete the message so that it is not received again.
             // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
@@ -84,9 +101,9 @@ namespace Ingress.Asb.Worker
             double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
             double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
 
-            // Todo: Borde inte device ingå i JSON message?
+            // Todo: Borde inte device ingï¿½ i JSON message?
             IoTHubMessageOrigin origin = new IoTHubMessageOrigin("device", latitude, longitude);
-            // Todo: Är tidstämpeln UTC eller lokaltid?
+            // Todo: ï¿½r tidstï¿½mpeln UTC eller lokaltid?
             RoadMeasureValue roadMeasureValue = new RoadMeasureValue(origin, roadAvailabilityModel.Created.ToString(), GetSurfaceType(roadAvailabilityModel), roadAvailabilityModel.Position.Status.ToString(), roadAvailabilityModel.Position.Accuracy, roadAvailabilityModel.Position.Angle);
 
             return roadMeasureValue;
@@ -102,7 +119,7 @@ namespace Ingress.Asb.Worker
         {
             _logger.LogInformation($"Message handler encountered an exception {exceptionReceivedEventArgs.Exception}.");
 
-            // Todo: Error handling. Hur skall vi lägga meddelandet på deadletter kön?
+            // Todo: Error handling. Hur skall vi lï¿½gga meddelandet pï¿½ deadletter kï¿½n?
 
             return Task.CompletedTask;
         }

@@ -21,6 +21,7 @@ namespace Ingress.Asb.Webapi
                 }).ConfigureServices(services =>
                 {
                     services.AddHostedService<ServiceBusClient>();
+                    services.AddHttpClient();
                 });
     }
 }
