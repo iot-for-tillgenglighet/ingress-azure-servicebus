@@ -25,9 +25,11 @@ namespace Ingress.Asb.Test
     public class UnitTest1
     {
         string messageContents = "{ \"createdUTC\": \"2020-05-27T15:38:19.208757Z\", \"predictions\": [{\"probability\": 0.016200000420212746, \"tagName\": \"GRASS\"}, {\"probability\": 0.00032017999910749495, \"tagName\": \"GRAVEL\" }, {\"probability\": 0.79594802856445313, \"tagName\": \"SNOW\" }, { \"probability\": 0.18753175437450409, \"tagName\": \"TARMAC\" } ], \"position\": { \"status\": \"1\", \"accuracy\": \"0.700000\", \"latitude\": \"62.410672\", \"longitude\": \"17.270033\", \"angle\": \"38.700000\" } }";
-        
+        string roadSegments = "[{\"@context\":[\"https://schema.lab.fiware.org/ld/context\", \"https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld\"], \"endPoint\":{\"type\":\"GeoProperty\", \"value\":{\"coordinates\":[17.269771,62.410616], \"type\":\"Point\"}}, \"id\":\"urn:ngsi-ld:RoadSegment:3:776896\", \"location\":{\"type\":\"GeoProperty\", \"value\":{\"coordinates\":[[17.270159,62.409858], [17.270083,62.409908], [17.270058,62.409926], [17.270029,62.409953], [17.269989,62.409995], [17.269967,62.410022], [17.269929,62.410091], [17.269914,62.410125], [17.269905,62.410151], [17.269898,62.410185], [17.269893,62.410237], [17.269894,62.410516], [17.269885,62.410544], [17.269861,62.410569], [17.269825,62.410592], [17.269781,62.410612], [17.269771,62.410616]], \"type\":\"LineString\"}}, \"name\":{\"type\":\"Property\", \"value\":\"3:776896\"}, \"refRoad\":{\"object\":\"urn:ngsi-ld:Road:3:776896\", \"type\":\"Relationship\"}, \"startPoint\":{\"type\":\"GeoProperty\", \"value\":{\"coordinates\":[17.270159,62.409858], \"type\":\"Point\"}}, \"totalLaneNumber\":{\"type\":\"Property\", \"value\": 1}, \"type\": \"RoadSegment\"}, {\"@context\":[\"https://schema.lab.fiware.org/ld/context\", \"https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld\"], \"endPoint\":{\"type\":\"GeoProperty\", \"value\":{\"coordinates\":[17.270655,62.410113], \"type\":\"Point\"}}, \"id\":\"urn:ngsi-ld:RoadSegment:16172:578724\",\"location\":{\"type\":\"GeoProperty\", \"value\": {\"coordinates\": [[17.270655,62.410113], [17.270645,62.410656], [17.270574,62.410685], [17.270328,62.410685], [17.270246,62.410661], [17.27021,62.410628], [17.270251,62.410144], [17.270287,62.410115], [17.270384,62.410106], [17.270655,62.410113]],\"type\":\"LineString\"}}, \"name\": {\"type\":\"Property\", \"value\":\"16172:578724\"}, \"refRoad\":{\"object\":\"urn:ngsi-ld:Road:16172:578724\", \"type\":\"Relationship\"}, \"startPoint\": {\"type\":\"GeoProperty\", \"value\": {\"coordinates\": [17.270655,62.410113], \"type\": \"Point\"}}, \"totalLaneNumber\": {\"type\":\"Property\", \"value\": 1}, \"type\":\"RoadSegment\"}]";
+
+
         [TestMethod]
-        public async Task TestMethod1()
+        public async Task TestThatProcessMessagesAsyncHandlesIncomingMessageAsExpected()
         {
             // Arrange
             IServiceCollection services = new ServiceCollection();
@@ -57,7 +59,7 @@ namespace Ingress.Asb.Test
                 .ReturnsAsync(new HttpResponseMessage
                 {
                     StatusCode = HttpStatusCode.OK,
-                    Content = new StringContent("{'name':thecodebuzz,'city':'USA'}"),
+                    Content = new StringContent(roadSegments),
                 });
 
             var client = new HttpClient(mockHttpMessageHandler.Object);
@@ -80,7 +82,6 @@ namespace Ingress.Asb.Test
             await hostedService.StopAsync(CancellationToken.None);
 
             // Assert
-
         }
 
         private static Message createMessageFromBody(string body) {

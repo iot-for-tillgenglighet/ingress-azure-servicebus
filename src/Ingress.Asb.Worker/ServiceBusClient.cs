@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
+using System.Collections.Generic;
 
 using Ingress.Asb.Worker.Models;
 
@@ -58,30 +59,35 @@ namespace Ingress.Asb.Worker
             _subscriptionClient.RegisterMessageHandler(ProcessMessagesAsync, messageHandlerOptions);
         }
 
-private async Task ProcessMessagesAsync(Message message, CancellationToken token)
+        private async Task ProcessMessagesAsync(Message message, CancellationToken token)
         {
-            string json = Encoding.UTF8.GetString(message.Body);
             // Process the message.
+            string json = Encoding.UTF8.GetString(message.Body);
             Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{json}");
 
             RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
 
             double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
             double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
-
-            //var baseUrl = Environment.GetEnvironmentVariable("BASE_URL");
-
             int distance = 30;
 
+            // Get all road segments within 30m of the location taken from message body.
             string newUrl = $"https://iotsundsvall.se/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
-
             var client = _httpClientFactory.CreateClient();
             var response = await client.GetAsync(newUrl);
+
+
+            //Create new list to store the roadSegments we get in our response, if the Get is successful.
+            var savedRoadSegments = new List<RoadSegment>();
  
             if (response.IsSuccessStatusCode)
             {
-                var result = response.Content.ReadAsStreamAsync().Result;
+                string result = response.Content.ReadAsStringAsync().Result;
+
+                savedRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
             }
+
+
 
             // Complete the message so that it is not received again.
             // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
