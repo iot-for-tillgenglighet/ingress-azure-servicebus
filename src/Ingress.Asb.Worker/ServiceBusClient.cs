@@ -83,7 +83,6 @@ namespace Ingress.Asb.Worker
             if (response.IsSuccessStatusCode)
             {
                 string result = response.Content.ReadAsStringAsync().Result;
-
                 savedRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
 
                 //Get the surfaceType and Probability from the message.Body
@@ -111,26 +110,21 @@ namespace Ingress.Asb.Worker
 
                     if (patchResponse.IsSuccessStatusCode) {
                         var stringContent = await patchResponse.Content.ReadAsStringAsync();
-                        Console.WriteLine(roadSegJson);
                         Console.WriteLine(patchResponse.StatusCode + ": " + stringContent);
                     } else {
-                        Console.WriteLine("Request failed: " + response.StatusCode);
+                        Console.WriteLine($"Failed to patch road segment {roadSegID}: {patchResponse.StatusCode}. Content: {patchResponse.Content}.");
                     }
 
-
                 } else {
-                    Console.WriteLine($"No roadSegments found near {latitude}, {longitude}.");
+                    Console.WriteLine($"No road segments found near {latitude}, {longitude}.");
                 }
                 
                 // Complete the message so that it is not received again.
                 // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
                 await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
             } else {
-                Console.WriteLine("Request failed: " + response.StatusCode);
+                Console.WriteLine($"Failed to retrieve road segments: {response.StatusCode}. Content: {response.Content}." );
             }
-            // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
-            // If subscriptionClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
-            // to avoid unnecessary exceptions.
         }
 
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
