@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Ingress.Asb.Worker
 {
@@ -62,20 +63,20 @@ namespace Ingress.Asb.Worker
         private async Task ProcessMessagesAsync(Message message, CancellationToken token)
         {
             // Process the message.
-            string json = Encoding.UTF8.GetString(message.Body);
-            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{json}");
+            string messageJson = Encoding.UTF8.GetString(message.Body);
+            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{messageJson}");
 
-            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
+            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(messageJson);
 
-            double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
-            double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
+            double latitude = roadAvailabilityModel.Position.Latitude;
+            double longitude = roadAvailabilityModel.Position.Longitude;
             int distance = 30;
 
             // Get all road segments within 30m of the location taken from message body.
             string newUrl = $"https://iotsundsvall.se/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
+            Console.WriteLine(newUrl);
             var client = _httpClientFactory.CreateClient();
             var response = await client.GetAsync(newUrl);
-
 
             //Create new list to store the roadSegments we get in our response, if the Get is successful.
             var savedRoadSegments = new List<RoadSegment>();
@@ -85,13 +86,41 @@ namespace Ingress.Asb.Worker
                 string result = response.Content.ReadAsStringAsync().Result;
 
                 savedRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
+
+                //Get the surfaceType and Probability from the message.Body
+                var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
+                var surfaceType = Convert.ToString(prediction.TagName).ToLower();
+            
+                //Patch RoadSegments, provided that our list is not empty.
+                if (savedRoadSegments.Count > 0) {
+                    RoadSegment roadSegment = savedRoadSegments[0];
+                    string roadSegID = roadSegment.ID;
+                    string patchURL = $"https://iotsundsvall.se/ngsi-ld/v1/entities/{roadSegID}/attrs/";
+
+                    var roadSegmentPatch = new RoadSegment(roadSegID, surfaceType, prediction.Probability);
+
+                    var settings = new JsonSerializerSettings
+                    {
+                        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                        NullValueHandling = NullValueHandling.Ignore
+                    };
+
+                    var roadSegJson = JsonConvert.SerializeObject(roadSegmentPatch, settings);
+                    var data = new StringContent(roadSegJson, Encoding.UTF8, "application/ld+json");
+
+                    var patchResponse = await client.PatchAsync(patchURL, data);
+                    var stringContent = await patchResponse.Content.ReadAsStringAsync();
+
+                    Console.WriteLine(roadSegJson);
+                    Console.WriteLine(patchResponse.StatusCode + ": " + stringContent);
+                } else {
+                    Console.WriteLine($"No roadSegments found near {latitude}, {longitude}.");
+                }
+                
+                // Complete the message so that it is not received again.
+                // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
+                await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
             }
-
-
-
-            // Complete the message so that it is not received again.
-            // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
-            await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
 
             // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
             // If subscriptionClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
@@ -104,8 +133,8 @@ namespace Ingress.Asb.Worker
 
             RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
 
-            double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
-            double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
+            double latitude = roadAvailabilityModel.Position.Latitude;
+            double longitude = roadAvailabilityModel.Position.Longitude;
 
             // Todo: Borde inte device ing� i JSON message?
             IoTHubMessageOrigin origin = new IoTHubMessageOrigin("device", latitude, longitude);

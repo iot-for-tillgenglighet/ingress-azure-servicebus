@@ -29,7 +29,7 @@ namespace Ingress.Asb.Test
 
 
         [TestMethod]
-        public async Task TestThatProcessMessagesAsyncHandlesIncomingMessageAsExpected()
+        public async Task TestThatServiceBusClientHandlesIncomingMessageAsExpected()
         {
             // Arrange
             IServiceCollection services = new ServiceCollection();
@@ -60,6 +60,62 @@ namespace Ingress.Asb.Test
                 {
                     StatusCode = HttpStatusCode.OK,
                     Content = new StringContent(roadSegments),
+                });
+
+            var client = new HttpClient(mockHttpMessageHandler.Object);
+            httpMock.Setup(_ => _.CreateClient(It.IsAny<string>())).Returns(client);
+
+            services.AddSingleton<IHttpClientFactory>(httpMock.Object);
+
+            var serviceProvider = services.BuildServiceProvider();
+            var hostedService = serviceProvider.GetService<IHostedService>();
+
+            // Act
+            await hostedService.StartAsync(CancellationToken.None);
+
+            while (messageHandlerFunc == null) {
+                await Task.Delay(100);
+            }
+
+            await messageHandlerFunc(createMessageFromBody(messageContents), CancellationToken.None);
+
+            await hostedService.StopAsync(CancellationToken.None);
+
+            // Assert
+        }
+
+        [TestMethod]
+        public async Task TestThatServiceBusClientHandlesEmptyList()
+        {
+            // Arrange
+            IServiceCollection services = new ServiceCollection();
+            services.AddSingleton<IHostedService, ServiceBusClient>();
+            services.AddLogging();
+
+            var config = new ConfigurationBuilder().Build();
+            services.AddSingleton<IConfiguration>(config);
+
+            System.Func<Message, CancellationToken, Task> messageHandlerFunc = null;
+
+            var asbClientMock = new Mock<ISubscriptionClient>();
+            asbClientMock.Setup(m => m.RegisterMessageHandler(
+                It.IsAny<System.Func<Message, CancellationToken, Task>>(),
+                It.IsAny<MessageHandlerOptions>()))
+                .Callback<System.Func<Message, CancellationToken, Task>, MessageHandlerOptions>((handler, opts) =>
+                {
+                    messageHandlerFunc = handler;
+                });
+            services.AddSingleton<ISubscriptionClient>(asbClientMock.Object);
+
+            var httpMock = new Mock<IHttpClientFactory>();
+            
+            var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
+            mockHttpMessageHandler.Protected()
+                .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(new HttpResponseMessage
+                {
+                    StatusCode = HttpStatusCode.OK,
+                    Content = new StringContent("[]")
                 });
 
             var client = new HttpClient(mockHttpMessageHandler.Object);
