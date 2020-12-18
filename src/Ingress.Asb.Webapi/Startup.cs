@@ -34,7 +34,6 @@ namespace Ingress.Asb.Webapi
             string subscriptionName = Environment.GetEnvironmentVariable("AZURESERVICEBUS_SUBSCRIPTIONNAME");
 
             services.AddSingleton((ISubscriptionClient)new SubscriptionClient(connectionString, topicPath, subscriptionName));
-            services.AddSingleton<IRabbitMQClient, RabbitMQClient>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

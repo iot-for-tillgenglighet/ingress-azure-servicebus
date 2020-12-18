@@ -128,33 +128,9 @@ namespace Ingress.Asb.Worker
             } else {
                 Console.WriteLine("Request failed: " + response.StatusCode);
             }
-
             // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
             // If subscriptionClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
             // to avoid unnecessary exceptions.
-        }
-
-        private IIoTHubMessage ConvertToIotHubMessage(Message message)
-        {
-            string json = Encoding.UTF8.GetString(message.Body);
-
-            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
-
-            double latitude = roadAvailabilityModel.Position.Latitude;
-            double longitude = roadAvailabilityModel.Position.Longitude;
-
-            // Todo: Borde inte device ing� i JSON message?
-            IoTHubMessageOrigin origin = new IoTHubMessageOrigin("device", latitude, longitude);
-            // Todo: �r tidst�mpeln UTC eller lokaltid?
-            RoadMeasureValue roadMeasureValue = new RoadMeasureValue(origin, roadAvailabilityModel.Created.ToString(), GetSurfaceType(roadAvailabilityModel), roadAvailabilityModel.Position.Status.ToString(), roadAvailabilityModel.Position.Accuracy, roadAvailabilityModel.Position.Angle);
-
-            return roadMeasureValue;
-        }
-
-        private string GetSurfaceType(RoadAvailabilityModel roadAvailabilityModel)
-        {
-            var probability = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
-            return probability.TagName;
         }
 
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
