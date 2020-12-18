@@ -74,7 +74,6 @@ namespace Ingress.Asb.Worker
 
             // Get all road segments within 30m of the location taken from message body.
             string newUrl = $"https://iotsundsvall.se/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
-            Console.WriteLine(newUrl);
             var client = _httpClientFactory.CreateClient();
             var response = await client.GetAsync(newUrl);
 
@@ -109,10 +108,16 @@ namespace Ingress.Asb.Worker
                     var data = new StringContent(roadSegJson, Encoding.UTF8, "application/ld+json");
 
                     var patchResponse = await client.PatchAsync(patchURL, data);
-                    var stringContent = await patchResponse.Content.ReadAsStringAsync();
 
-                    Console.WriteLine(roadSegJson);
-                    Console.WriteLine(patchResponse.StatusCode + ": " + stringContent);
+                    if (patchResponse.IsSuccessStatusCode) {
+                        var stringContent = await patchResponse.Content.ReadAsStringAsync();
+                        Console.WriteLine(roadSegJson);
+                        Console.WriteLine(patchResponse.StatusCode + ": " + stringContent);
+                    } else {
+                        Console.WriteLine("Request failed: " + response.StatusCode);
+                    }
+
+
                 } else {
                     Console.WriteLine($"No roadSegments found near {latitude}, {longitude}.");
                 }
@@ -120,6 +125,8 @@ namespace Ingress.Asb.Worker
                 // Complete the message so that it is not received again.
                 // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
                 await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
+            } else {
+                Console.WriteLine("Request failed: " + response.StatusCode);
             }
 
             // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
