@@ -74,24 +74,41 @@ namespace Ingress.Asb.Worker
 
             // Get all road segments within 30m of the location taken from message body.
             string newUrl = $"https://iotsundsvall.se/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
+            
             var client = _httpClientFactory.CreateClient();
             var response = await client.GetAsync(newUrl);
 
             //Create new list to store the roadSegments we get in our response, if the Get is successful.
-            var savedRoadSegments = new List<RoadSegment>();
+            var nearbyRoadSegments = new List<RoadSegment>();
  
             if (response.IsSuccessStatusCode)
             {
                 string result = response.Content.ReadAsStringAsync().Result;
-                savedRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
+                nearbyRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
 
                 //Get the surfaceType and Probability from the message.Body
                 var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
                 var surfaceType = Convert.ToString(prediction.TagName).ToLower();
             
                 //Patch RoadSegments, provided that our list is not empty.
-                if (savedRoadSegments.Count > 0) {
-                    RoadSegment roadSegment = savedRoadSegments[0];
+                if (nearbyRoadSegments.Count > 0) {
+                    int closestSegmentIndex = 0;
+
+                    if (nearbyRoadSegments.Count > 1) {
+                        // Find the nearest roadSegment to the location in message. 
+                        double closestSegmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[0], latitude, longitude);
+                        for (int i = 1; i < nearbyRoadSegments.Count; i++) {
+                            double segmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[i], latitude, longitude);
+
+                            if (segmentDistance < closestSegmentDistance) {
+                                closestSegmentDistance = segmentDistance;
+                                closestSegmentIndex = i;
+                                Console.WriteLine($"The closest road Segment is {nearbyRoadSegments[closestSegmentIndex].ID}, with a distance of {closestSegmentDistance} meters.");
+                            }
+                        }
+                    }
+
+                    RoadSegment roadSegment = nearbyRoadSegments[closestSegmentIndex];
                     string roadSegID = roadSegment.ID;
                     string patchURL = $"https://iotsundsvall.se/ngsi-ld/v1/entities/{roadSegID}/attrs/";
 
@@ -132,8 +149,64 @@ namespace Ingress.Asb.Worker
             _logger.LogInformation($"Message handler encountered an exception {exceptionReceivedEventArgs.Exception}.");
 
             // Todo: Error handling. Hur skall vi l�gga meddelandet p� deadletter k�n?
+            
 
             return Task.CompletedTask;
+        }
+
+        private static int DistanceToSegmentFromLocation(RoadSegment roadSegment, double latitude, double longitude) {
+            
+            // TODO: Calculate the distance.
+            List<int> distanceToLine = new List<int>();
+            // iterate over roadSegment coordinates
+            var roadSegLatLong = roadSegment.Location.Value.Coordinates; 
+            for (int i = 1; i < roadSegLatLong.Length; i++) {
+                // Create lines between coordinate pairs - between coordinate 0-1, 1-2, 2-3, 2-3
+                double[][] line = {roadSegLatLong[i - 1], roadSegLatLong[i]};
+                
+                distanceToLine.Add(DistanceToLineFromLocation(line[0][0], line[0][1], line[1][0], line[1][1], latitude, longitude));
+            }
+
+            // distance to closest line is distance to roadsegment
+            int distanceToSegment = distanceToLine.Min();
+            Console.WriteLine($"The closest roadSegment line is {distanceToSegment} meters away.");
+
+            //return distanceToSegment
+            return distanceToSegment;
+        }
+
+        private static int DistanceToLineFromLocation(double lineLat0, double lineLon0, double lineLat1, double lineLon1, double latitude, double longitude) {
+
+                double[] pointAtoP = {lineLat0 - latitude, lineLon0 - longitude};
+                double[] pointAtoB = {lineLat1 - latitude, lineLon1 - longitude};
+
+                double fromAtoB = Math.Pow(pointAtoB[0],2) + Math.Pow(pointAtoB[1],2);
+                double pointATimesPointB = pointAtoP[0] * pointAtoB[0] + pointAtoP[1] * pointAtoB[1];
+
+                double distanceFromAToClosestPoint = pointATimesPointB / fromAtoB;
+                
+                double[] closestPoint = {latitude + pointAtoB[0] * distanceFromAToClosestPoint, longitude + pointAtoB[1] * distanceFromAToClosestPoint};
+        
+                double distance = ConvertDistanceBetweenTwoPointsToMeters(closestPoint, latitude, longitude);
+                Console.WriteLine($"The distance in meters between the nearest point of the roadSegment Line and the message location is: {distance}");
+
+            return Convert.ToInt32(distance);
+        }
+
+        private static int ConvertDistanceBetweenTwoPointsToMeters(double[] closestPoint, double latitude, double longitude) {
+            // Haversine formula 
+            double earthRadius = 6378.137;
+            double lat = closestPoint[1] * Math.PI / 180 - latitude * Math.PI / 180;
+            double lon = closestPoint[0] * Math.PI / 180 - longitude * Math.PI / 180;
+            double a =  Math.Sin(lat/2) * Math.Sin(lat/2) + 
+                        Math.Cos(latitude * Math.PI / 180) * Math.Cos(closestPoint[1] * Math.PI / 180) *
+                        Math.Sin(lon/2) * Math.Sin(lon/2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1-a));
+            double d = earthRadius * c;
+
+            int distanceInMeters = Convert.ToInt32(d * 1000);
+
+            return distanceInMeters;
         }
     }
 }
