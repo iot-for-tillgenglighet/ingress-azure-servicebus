@@ -64,7 +64,7 @@ namespace Ingress.Asb.Worker
         {
             // Process the message.
             string messageJson = Encoding.UTF8.GetString(message.Body);
-            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{messageJson}");
+            _logger.LogInformation($"Received message: SequenceNumber: {message.SystemProperties.SequenceNumber} Body:{messageJson}");
 
             RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(messageJson);
 
@@ -129,27 +129,26 @@ namespace Ingress.Asb.Worker
                         var stringContent = await patchResponse.Content.ReadAsStringAsync();
                         Console.WriteLine(patchResponse.StatusCode + ": " + stringContent);
                     } else {
-                        Console.WriteLine($"Failed to patch road segment {roadSegID}: {patchResponse.StatusCode}. Content: {patchResponse.Content}.");
+                        _logger.LogError($"Failed to patch road segment {roadSegID}: {patchResponse.StatusCode}. Content: {patchResponse.Content}.");
                     }
 
                 } else {
-                    Console.WriteLine($"No road segments found near {latitude}, {longitude}.");
+                    _logger.LogWarning($"No road segments found near {latitude}, {longitude}.");
                 }
                 
                 // Complete the message so that it is not received again.
                 // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
                 await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
             } else {
-                Console.WriteLine($"Failed to retrieve road segments: {response.StatusCode}. Content: {response.Content}." );
+                _logger.LogWarning($"Failed to retrieve road segments: {response.StatusCode}. Content: {response.Content}." );
             }
         }
 
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
         {
-            _logger.LogInformation($"Message handler encountered an exception {exceptionReceivedEventArgs.Exception}.");
+            _logger.LogInformation($"Message handler encountered an exception: {exceptionReceivedEventArgs.Exception.Message}.");
 
-            // Todo: Error handling. Hur skall vi l�gga meddelandet p� deadletter k�n?
-            
+            // TODO: Error handling. Hur skall vi l�gga meddelandet p� deadletter k�n?
 
             return Task.CompletedTask;
         }
