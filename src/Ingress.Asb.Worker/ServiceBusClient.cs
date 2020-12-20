@@ -176,7 +176,7 @@ namespace Ingress.Asb.Worker
         }
 
         private static int DistanceToLineFromLocation(double lineLat0, double lineLon0, double lineLat1, double lineLon1, double latitude, double longitude) {
-
+                // find closest point on road segment line to the location from our message body
                 double[] pointAtoP = {lineLat0 - latitude, lineLon0 - longitude};
                 double[] pointAtoB = {lineLat1 - latitude, lineLon1 - longitude};
 
