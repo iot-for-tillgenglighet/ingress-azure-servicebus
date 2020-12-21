@@ -3,6 +3,8 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Net.Http;
+using System.Collections.Generic;
 
 using Ingress.Asb.Worker.Models;
 
@@ -11,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Ingress.Asb.Worker
 {
@@ -19,14 +22,13 @@ namespace Ingress.Asb.Worker
         private readonly ILogger<ServiceBusClient> _logger;
         private readonly IConfiguration _configuration;
         private ISubscriptionClient _subscriptionClient;
-        private readonly IRabbitMQClient _rabbitMQClient;
-
-        public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient, IRabbitMQClient rabbitMQClient)
+        private readonly IHttpClientFactory _httpClientFactory;
+        public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient, IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _configuration = configuration;
             _subscriptionClient = subscriptionClient;
-            _rabbitMQClient = rabbitMQClient;
+            _httpClientFactory = httpClientFactory;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -61,50 +63,155 @@ namespace Ingress.Asb.Worker
         private async Task ProcessMessagesAsync(Message message, CancellationToken token)
         {
             // Process the message.
-            Console.WriteLine($"Received message: SequenceNumber:{message.SystemProperties.SequenceNumber} Body:{Encoding.UTF8.GetString(message.Body)}");
+            string messageJson = Encoding.UTF8.GetString(message.Body);
+            _logger.LogInformation($"Received message: SequenceNumber: {message.SystemProperties.SequenceNumber} Body:{messageJson}");
 
-            IIoTHubMessage iotHubMessage = ConvertToIotHubMessage(message);
-            _rabbitMQClient.PostMessage(iotHubMessage);
+            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(messageJson);
 
-            // Complete the message so that it is not received again.
-            // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
-            await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
+            double latitude = Convert.ToDouble(roadAvailabilityModel.Position.Latitude);
+            double longitude = Convert.ToDouble(roadAvailabilityModel.Position.Longitude);
 
-            // Note: Use the cancellationToken passed as necessary to determine if the subscriptionClient has already been closed.
-            // If subscriptionClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
-            // to avoid unnecessary exceptions.
-        }
+            int distance = Convert.ToInt32(Environment.GetEnvironmentVariable("DISTANCE"));
+            if (distance == 0) {
+                distance = 30;
+            }
 
-        private IIoTHubMessage ConvertToIotHubMessage(Message message)
-        {
-            string json = Encoding.UTF8.GetString(message.Body);
+            // Get all road segments within 30m of the location taken from message body.
+            string baseUrl = Environment.GetEnvironmentVariable("BASE_URL");
+            string newUrl = $"{baseUrl}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
+            
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.GetAsync(newUrl);
 
-            RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(json);
+            // Create new list to store the roadSegments we get in our response, if the Get is successful.
+            var nearbyRoadSegments = new List<RoadSegment>();
+ 
+            if (response.IsSuccessStatusCode)
+            {
+                string result = response.Content.ReadAsStringAsync().Result;
+                nearbyRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
 
-            double latitude = double.Parse(roadAvailabilityModel.Position.Latitude, System.Globalization.CultureInfo.InvariantCulture);
-            double longitude = double.Parse(roadAvailabilityModel.Position.Longitude, System.Globalization.CultureInfo.InvariantCulture);
+                //Get the surfaceType and Probability from the message.Body
+                var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
+                var surfaceType = Convert.ToString(prediction.TagName).ToLower();
+            
+                //Patch RoadSegments, provided that our list is not empty.
+                if (nearbyRoadSegments.Count > 0) {
+                    int closestSegmentIndex = 0;
 
-            // Todo: Borde inte device ingå i JSON message?
-            IoTHubMessageOrigin origin = new IoTHubMessageOrigin("device", latitude, longitude);
-            // Todo: Är tidstämpeln UTC eller lokaltid?
-            RoadMeasureValue roadMeasureValue = new RoadMeasureValue(origin, roadAvailabilityModel.Created.ToString(), GetSurfaceType(roadAvailabilityModel), roadAvailabilityModel.Position.Status.ToString(), roadAvailabilityModel.Position.Accuracy, roadAvailabilityModel.Position.Angle);
+                    if (nearbyRoadSegments.Count > 1) {
+                        // Find the nearest roadSegment to the location in message. 
+                        double closestSegmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[0], longitude, latitude);
+                        for (int i = 1; i < nearbyRoadSegments.Count; i++) {
+                            double segmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[i], longitude, latitude);
 
-            return roadMeasureValue;
-        }
+                            if (segmentDistance < closestSegmentDistance) {
+                                closestSegmentDistance = segmentDistance;
+                                closestSegmentIndex = i;
+                            }
+                        }
+                        _logger.LogInformation($"The closest road Segment is {nearbyRoadSegments[closestSegmentIndex].ID}, with a distance of {closestSegmentDistance} meters.");
+                    }
 
-        private string GetSurfaceType(RoadAvailabilityModel roadAvailabilityModel)
-        {
-            var probability = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
-            return probability.TagName;
+                    RoadSegment roadSegment = nearbyRoadSegments[closestSegmentIndex];
+                    string roadSegID = roadSegment.ID;
+                    string patchURL = $"{baseUrl}/ngsi-ld/v1/entities/{roadSegID}/attrs/";
+
+                    var roadSegmentPatch = new RoadSegment(roadSegID, surfaceType, prediction.Probability);
+
+                    var settings = new JsonSerializerSettings
+                    {
+                        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                        NullValueHandling = NullValueHandling.Ignore
+                    };
+
+                    var roadSegJson = JsonConvert.SerializeObject(roadSegmentPatch, settings);
+                    var data = new StringContent(roadSegJson, Encoding.UTF8, "application/ld+json");
+
+                    var patchResponse = await client.PatchAsync(patchURL, data);
+
+                    if (patchResponse.IsSuccessStatusCode) {
+                        var stringContent = await patchResponse.Content.ReadAsStringAsync();
+                        _logger.LogInformation(patchResponse.StatusCode + ": " + stringContent);
+                    } else {
+                        _logger.LogError($"Failed to patch road segment {roadSegID}: {patchResponse.StatusCode}. Content: {patchResponse.Content}.");
+                    }
+
+                } else {
+                    _logger.LogWarning($"No road segments found near {longitude}, {latitude}.");
+                }
+                
+                // Complete the message so that it is not received again.
+                // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
+                await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
+            } else {
+                _logger.LogWarning($"Failed to retrieve road segments: {response.StatusCode}. Content: {response.Content}." );
+            }
         }
 
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
         {
-            _logger.LogInformation($"Message handler encountered an exception {exceptionReceivedEventArgs.Exception}.");
-
-            // Todo: Error handling. Hur skall vi lägga meddelandet på deadletter kön?
+            _logger.LogInformation($"Message handler encountered an exception: {exceptionReceivedEventArgs.Exception.Message}.");
 
             return Task.CompletedTask;
+        }
+
+        private int DistanceToSegmentFromLocation(RoadSegment roadSegment, double longitude, double latitude) {
+            
+            List<int> distanceToLine = new List<int>();
+            // iterate over roadSegment coordinates
+            var roadSegLatLong = roadSegment.Location.Value.Coordinates; 
+            for (int i = 1; i < roadSegLatLong.Length; i++) {
+                // Create lines between coordinate pairs - between coordinate 0-1, 1-2, 2-3, 2-3
+                double[] startPoint = roadSegLatLong[i - 1];
+                double[] endPoint = roadSegLatLong[i];
+                
+                distanceToLine.Add(DistanceToLineFromLocation(startPoint[0], startPoint[1], endPoint[0], endPoint[1], longitude, latitude));
+            }
+
+            // distance to closest line is distance to roadsegment
+            int distanceToSegment = distanceToLine.Min();
+            _logger.LogInformation($"The closest roadSegment line is {distanceToSegment} meters away.");
+
+            return distanceToSegment;
+        }
+
+        private int DistanceToLineFromLocation(double startPointLon, double startPointLat, double endPointLon, double endPointLat, double longitude, double latitude) {
+            // Find distance between startPoint and endPoint of line, find closest point on line to the message location.
+            // Index 0 is always longitude, index 1 is always latitude.
+
+            double[] fromStartPointToLocation = {startPointLon - longitude, startPointLat - latitude};
+            double[] fromEndPointToLocation = {endPointLon - longitude, endPointLat - latitude};
+
+            double fromStartPointToEndPoint = Math.Pow(fromEndPointToLocation[0],2) + Math.Pow(fromEndPointToLocation[1],2);
+            
+            double startPointToLocationTimesEndPointToLocation = fromStartPointToLocation[0] * fromEndPointToLocation[0] + fromStartPointToLocation[1] * fromEndPointToLocation[1];
+            
+            double distanceFromLocationToClosestPoint = startPointToLocationTimesEndPointToLocation / fromStartPointToEndPoint;
+            
+            // Get the coordinates of the closest point.
+            double[] closestPoint = {longitude + fromEndPointToLocation[0] * distanceFromLocationToClosestPoint, latitude + fromEndPointToLocation[1] * distanceFromLocationToClosestPoint};
+    
+            double distance = ConvertDistanceBetweenTwoPointsToMeters(closestPoint, longitude, latitude);
+            _logger.LogDebug($"The distance in meters between the nearest point of the roadSegment Line and the message location is: {distance}");
+
+            return Convert.ToInt32(distance);
+        }
+
+        private static int ConvertDistanceBetweenTwoPointsToMeters(double[] closestPoint, double longitude, double latitude) {
+            // Haversine formula 
+            const double EarthRadius = 6378.137;
+            double lon = closestPoint[0] * Math.PI / 180 - longitude * Math.PI / 180;
+            double lat = closestPoint[1] * Math.PI / 180 - latitude * Math.PI / 180;
+            double a =  Math.Sin(lat/2) * Math.Sin(lat/2) + 
+                        Math.Cos(longitude * Math.PI / 180) * Math.Cos(closestPoint[0] * Math.PI / 180) *
+                        Math.Sin(lon/2) * Math.Sin(lon/2);
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1-a));
+            double d = EarthRadius * c;
+
+            int distanceInMeters = Convert.ToInt32(d * 1000);
+
+            return distanceInMeters;
         }
     }
 }

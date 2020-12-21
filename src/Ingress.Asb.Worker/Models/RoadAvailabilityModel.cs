@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Newtonsoft.Json;
 
-namespace Ingress.Asb.Worker
+namespace Ingress.Asb.Worker.Models
 {
     public partial class RoadAvailabilityModel
     {

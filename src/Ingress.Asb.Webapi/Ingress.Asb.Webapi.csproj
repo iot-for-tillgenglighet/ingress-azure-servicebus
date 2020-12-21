@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Ingress.Asb.Worker\Ingress.Asb.Worker.csproj" />
+    <ProjectReference Include="..\..\test\Ingress.Asb.Test\Ingress.Asb.Test.csproj" />
   </ItemGroup>
-
 
 </Project>
