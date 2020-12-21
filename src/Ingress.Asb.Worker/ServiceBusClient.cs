@@ -68,8 +68,8 @@ namespace Ingress.Asb.Worker
 
             RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(messageJson);
 
-            double latitude = roadAvailabilityModel.Position.Latitude;
-            double longitude = roadAvailabilityModel.Position.Longitude;
+            double latitude = Convert.ToDouble(roadAvailabilityModel.Position.Latitude);
+            double longitude = Convert.ToDouble(roadAvailabilityModel.Position.Longitude);
 
             int distance = Convert.ToInt32(Environment.GetEnvironmentVariable("DISTANCE"));
             if (distance == 0) {
@@ -193,21 +193,21 @@ namespace Ingress.Asb.Worker
             double[] closestPoint = {longitude + fromEndPointToLocation[0] * distanceFromLocationToClosestPoint, latitude + fromEndPointToLocation[1] * distanceFromLocationToClosestPoint};
     
             double distance = ConvertDistanceBetweenTwoPointsToMeters(closestPoint, longitude, latitude);
-            _logger.LogInformation($"The distance in meters between the nearest point of the roadSegment Line and the message location is: {distance}");
+            _logger.LogDebug($"The distance in meters between the nearest point of the roadSegment Line and the message location is: {distance}");
 
             return Convert.ToInt32(distance);
         }
 
         private static int ConvertDistanceBetweenTwoPointsToMeters(double[] closestPoint, double longitude, double latitude) {
             // Haversine formula 
-            const double earthRadius = 6378.137;
+            const double EarthRadius = 6378.137;
             double lon = closestPoint[0] * Math.PI / 180 - longitude * Math.PI / 180;
             double lat = closestPoint[1] * Math.PI / 180 - latitude * Math.PI / 180;
             double a =  Math.Sin(lat/2) * Math.Sin(lat/2) + 
                         Math.Cos(longitude * Math.PI / 180) * Math.Cos(closestPoint[0] * Math.PI / 180) *
                         Math.Sin(lon/2) * Math.Sin(lon/2);
             double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1-a));
-            double d = earthRadius * c;
+            double d = EarthRadius * c;
 
             int distanceInMeters = Convert.ToInt32(d * 1000);
 

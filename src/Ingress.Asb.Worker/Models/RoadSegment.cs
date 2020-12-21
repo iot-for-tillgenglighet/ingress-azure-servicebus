@@ -48,7 +48,7 @@ namespace Ingress.Asb.Worker.Models
         }
     }
 
-        public class GeoProperty
+    public class GeoProperty
     {
         [JsonProperty("type")]
         public string Type { get; set; }
@@ -62,6 +62,7 @@ namespace Ingress.Asb.Worker.Models
             Value = new GeoPropertyValue(latitude, longitude);
         }
     }
+    
     public class GeoPropertyValue
     {
         [JsonProperty("type")]

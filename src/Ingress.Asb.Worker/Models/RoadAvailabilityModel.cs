@@ -27,10 +27,10 @@ namespace Ingress.Asb.Worker.Models
         public string Accuracy { get; set; }
 
         [JsonProperty("latitude")]
-        public double Latitude { get; set; }
+        public string Latitude { get; set; }
 
         [JsonProperty("longitude")]
-        public double Longitude { get; set; }
+        public string Longitude { get; set; }
 
         [JsonProperty("angle")]
         public string Angle { get; set; }
