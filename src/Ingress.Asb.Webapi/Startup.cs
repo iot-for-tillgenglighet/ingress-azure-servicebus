@@ -25,10 +25,6 @@ namespace Ingress.Asb.Webapi
         {
             services.AddControllers();
 
-            //string connectionString = Configuration["Connectionstring"];
-            //string topicPath = Configuration["TopicName"];
-            //string subscriptionName = Configuration["SubscriptionName"];
-
             string connectionString = Environment.GetEnvironmentVariable("AZURESERVICEBUS_CONNECTIONSTRING");
             string topicPath = Environment.GetEnvironmentVariable("AZURESERVICEBUS_TOPICNAME");
             string subscriptionName = Environment.GetEnvironmentVariable("AZURESERVICEBUS_SUBSCRIPTIONNAME");
@@ -44,10 +40,7 @@ namespace Ingress.Asb.Webapi
                 app.UseDeveloperExceptionPage();
             }
 
-            app.UseHttpsRedirection();
-
             app.UseRouting();
-
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>
