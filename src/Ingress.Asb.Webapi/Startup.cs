@@ -26,7 +26,7 @@ namespace Ingress.Asb.Webapi
             services.AddControllers();
 
             string connectionString = Environment.GetEnvironmentVariable("AZURESERVICEBUS_CONNECTIONSTRING");
-            string topicPath = Environment.GetEnvironmentVariable("AZURESERVICEBUS_TOPICNAME");
+            string topicPath = Environment.GetEnvironmentVariable("AZURESERVICEBUS_TOPICPATH");
             string subscriptionName = Environment.GetEnvironmentVariable("AZURESERVICEBUS_SUBSCRIPTIONNAME");
 
             services.AddSingleton((ISubscriptionClient)new SubscriptionClient(connectionString, topicPath, subscriptionName));
