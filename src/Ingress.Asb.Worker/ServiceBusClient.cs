@@ -71,7 +71,10 @@ namespace Ingress.Asb.Worker
         {
             // Process the message.
             string messageJson = Encoding.UTF8.GetString(message.Body);
-            _logger.LogInformation($"Received message: SequenceNumber: {message.SystemProperties.SequenceNumber} Body:{messageJson}");
+            _logger.LogInformation(
+                "Received message: {SequenceNumber}: {Body}",
+                message.SystemProperties.SequenceNumber,messageJson
+                );
 
             RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(messageJson);
 
@@ -135,18 +138,27 @@ namespace Ingress.Asb.Worker
                         var stringContent = await patchResponse.Content.ReadAsStringAsync();
                         _logger.LogInformation(patchResponse.StatusCode + ": " + stringContent);
                     } else {
-                        _logger.LogError($"Failed to patch road segment {roadSegID}: {patchResponse.StatusCode}. Content: {patchResponse.Content}.");
+                        _logger.LogError(
+                            "Failed to patch road segment {RoadSegment}: {StatusCode} {Content}",
+                            roadSegID, patchResponse.StatusCode, patchResponse.Content
+                            );
                     }
 
                 } else {
-                    _logger.LogWarning($"No road segments found near {longitude}, {latitude}.");
+                    _logger.LogWarning(
+                        "No road segments found within {Distance}m of ({longitude}, {latitude}).",
+                        _maxRoadSegmentDistance, longitude, latitude
+                        );
                 }
                 
                 // Complete the message so that it is not received again.
                 // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
                 await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
             } else {
-                _logger.LogWarning($"Failed to retrieve road segments: {response.StatusCode}. Content: {response.Content}." );
+                _logger.LogWarning(
+                    "Failed to retrieve road segments: {StatusCode} {Content}",
+                    response.StatusCode, response.Content
+                    );
             }
         }
 
@@ -172,7 +184,10 @@ namespace Ingress.Asb.Worker
 
             // distance to closest line is distance to roadsegment
             int distanceToSegment = distanceToLine.Min();
-            _logger.LogInformation($"The closest roadSegment line is {distanceToSegment} meters away.");
+            _logger.LogInformation(
+                "The closest line segment of {RoadSegment} is {Distance} meters away.",
+                roadSegment.ID, distanceToSegment
+                );
 
             return distanceToSegment;
         }
@@ -194,7 +209,7 @@ namespace Ingress.Asb.Worker
             double[] closestPoint = {longitude + fromEndPointToLocation[0] * distanceFromLocationToClosestPoint, latitude + fromEndPointToLocation[1] * distanceFromLocationToClosestPoint};
     
             double distance = ConvertDistanceBetweenTwoPointsToMeters(closestPoint, longitude, latitude);
-            _logger.LogDebug($"The distance in meters between the nearest point of the roadSegment Line and the message location is: {distance}");
+            _logger.LogDebug($"The distance between the nearest point of the roadSegment Line and the message location is {distance}m");
 
             return Convert.ToInt32(distance);
         }
