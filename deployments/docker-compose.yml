@@ -1,65 +1,17 @@
 version: "3"
 services:
-  problemreport:
-    image: "iot-for-tillgenglighet/api-problemreport:latest"
+  ingress-asb:
+    image: "iot-for-tillgenglighet/ingress-azure-servicebus:latest"
     build:
       context: ..
       dockerfile: ./deployments/Dockerfile
-    restart: always
-    depends_on:
-      - rabbitmq
-      - postgresdb
-    links:
-      - rabbitmq
-      - postgresdb
+    restart: "no"
     environment:
-      PROBLEMREPORT_DB_HOST: "postgresdb"
-      PROBLEMREPORT_DB_USER: "testuser"
-      PROBLEMREPORT_DB_NAME: "problemreport"
-      PROBLEMREPORT_DB_PASSWORD: "testpass"
-      PROBLEMREPORT_DB_SSLMODE: "disable"
-      PROBLEMREPORT_API_PORT: "8383"
-      RABBITMQ_HOST: "rabbitmq"
+      DIWISE_ASB_CONNECTIONSTRING: $INGRESS_ASB_CONNSTR
+      DIWISE_ASB_TOPICPATH: "tillgangligavagar"
+      DIWISE_ASB_SUBSCRIPTIONNAME: "tillgangligavagarSub"
+      DIWISE_CONTEXT_BROKER_URL: "http://localhost"
+      DIWISE_MAX_SEGMENT_DISTANCE: "30"
 
     ports:
-      - "8383:8383"
-
-  federation:
-    build:
-      context: ..
-      dockerfile: ./test/federation/federation-dockerfile
-    restart: always
-    depends_on:
-      - problemreport
-    environment:
-      API_GQL_FEDERATION_PORT: '8989'
-      API_GQL_FEDERATION_SVCS: 'problemreport:8383'
-    ports:
-      - '8989:8989'
-
-  postgresdb:
-    image: "iot-for-tillgenglighet/testdb-postgres:latest"
-    build:
-      context: ..
-      dockerfile: ./test/database/testdb-dockerfile
-    restart: always
-    environment:
-      POSTGRES_DB: "problemreport"
-      POSTGRES_USER: "testuser"
-      POSTGRES_PASSWORD: "testpass"
-    ports:
-      - "5432"
-
-  rabbitmq:
-    image: "bitnami/rabbitmq:3.8"
-    ports:
-      - "4369"
-      - "5672"
-      - "25672"
-      - "15672"
-    volumes:
-      - "rabbitmq_data:/bitnami"
-
-volumes:
-  rabbitmq_data:
-    driver: local
+      - "5000:5000"
