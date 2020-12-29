@@ -9,6 +9,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
+using Serilog;
+
 namespace Ingress.Asb.Webapi
 {
     public class Startup
@@ -39,6 +41,8 @@ namespace Ingress.Asb.Webapi
             {
                 app.UseDeveloperExceptionPage();
             }
+
+            app.UseSerilogRequestLogging();
 
             app.UseRouting();
             app.UseAuthorization();

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using System;
 
 using Serilog;
+using Serilog.Events;
 using Serilog.Formatting.Compact;
 
 namespace Ingress.Asb.Webapi
@@ -18,6 +19,7 @@ namespace Ingress.Asb.Webapi
         {
             Log.Logger = new LoggerConfiguration()
                 .Enrich.FromLogContext()
+                .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
                 .WriteTo.Console(new RenderedCompactJsonFormatter())
                 .CreateLogger();
 
