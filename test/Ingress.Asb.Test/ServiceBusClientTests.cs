@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -126,7 +127,12 @@ namespace Ingress.Asb.Test
             services.AddSingleton<IHostedService, ServiceBusClient>();
             services.AddLogging();
 
-            var config = new ConfigurationBuilder().Build();
+            var dict = new Dictionary<string, string>
+            {
+                {"CONTEXT_BROKER_URL", "http://localhost"},
+                {"MAX_SEGMENT_DISTANCE", "30"}
+            };
+            var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
             services.AddSingleton<IConfiguration>(config);
 
             var asbClientMock = new Mock<ISubscriptionClient>();
