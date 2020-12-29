@@ -21,14 +21,21 @@ namespace Ingress.Asb.Worker
     {
         private readonly ILogger<ServiceBusClient> _logger;
         private readonly IConfiguration _configuration;
-        private ISubscriptionClient _subscriptionClient;
+        private readonly ISubscriptionClient _subscriptionClient;
         private readonly IHttpClientFactory _httpClientFactory;
+
+        private readonly string _contextBrokerURL;
+        private readonly UInt32 _maxRoadSegmentDistance;
+
         public ServiceBusClient(ILogger<ServiceBusClient> logger, IConfiguration configuration, ISubscriptionClient subscriptionClient, IHttpClientFactory httpClientFactory)
         {
             _logger = logger;
             _configuration = configuration;
             _subscriptionClient = subscriptionClient;
             _httpClientFactory = httpClientFactory;
+
+            _contextBrokerURL = ReturnValidURLOrThrow(_configuration["CONTEXT_BROKER_URL"]);
+            _maxRoadSegmentDistance = ReturnValidSegmentDistanceOrThrow(_configuration["MAX_SEGMENT_DISTANCE"]);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -71,14 +78,8 @@ namespace Ingress.Asb.Worker
             double latitude = Convert.ToDouble(roadAvailabilityModel.Position.Latitude);
             double longitude = Convert.ToDouble(roadAvailabilityModel.Position.Longitude);
 
-            int distance = Convert.ToInt32(Environment.GetEnvironmentVariable("DISTANCE"));
-            if (distance == 0) {
-                distance = 30;
-            }
-
-            // Get all road segments within 30m of the location taken from message body.
-            string baseUrl = Environment.GetEnvironmentVariable("BASE_URL");
-            string newUrl = $"{baseUrl}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={distance}&geometry=Point&coordinates=[{longitude},{latitude}]";
+            // Get all road segments within a certain distance of the location taken from message body.
+            string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={_maxRoadSegmentDistance}&geometry=Point&coordinates=[{longitude},{latitude}]";
             
             var client = _httpClientFactory.CreateClient();
             var response = await client.GetAsync(newUrl);
@@ -115,7 +116,7 @@ namespace Ingress.Asb.Worker
 
                     RoadSegment roadSegment = nearbyRoadSegments[closestSegmentIndex];
                     string roadSegID = roadSegment.ID;
-                    string patchURL = $"{baseUrl}/ngsi-ld/v1/entities/{roadSegID}/attrs/";
+                    string patchURL = $"{_contextBrokerURL}/ngsi-ld/v1/entities/{roadSegID}/attrs/";
 
                     var roadSegmentPatch = new RoadSegment(roadSegID, surfaceType, prediction.Probability);
 
@@ -212,6 +213,58 @@ namespace Ingress.Asb.Worker
             int distanceInMeters = Convert.ToInt32(d * 1000);
 
             return distanceInMeters;
+        }
+
+        private UInt32 ReturnValidSegmentDistanceOrThrow(string distanceAsString) {
+            const UInt32 MaxSegmentDistance = 100;
+            const UInt32 MinRecommendedSegmentDistance = 15;
+            const UInt32 MinSegmentDistance = 5;
+
+            UInt32 distance = 30;
+
+            try
+            {
+                if (distanceAsString != null && distanceAsString.Length > 0)
+                {
+                    distance = System.UInt32.Parse(distanceAsString);
+                }
+            }
+            catch (Exception e)
+            {
+                throw new ArgumentException($"Max road segment distance could not be parsed from {distanceAsString}: {e.Message}");
+            }
+
+            if (distance > MaxSegmentDistance)
+            {
+                throw new ArgumentException($"Max road segment distance {distance}m is larger than the maximum allowed {MaxSegmentDistance}m!");
+            }
+
+            if (distance < MinSegmentDistance)
+            {
+                throw new ArgumentException($"Max road segment distance {distance}m is lower than the minimum allowed {MinSegmentDistance}m!");
+            }
+            else if (distance < MinRecommendedSegmentDistance)
+            {
+                _logger.LogWarning($"Max road segment distance {distance}m is lower than the recommended minimum {MinRecommendedSegmentDistance}m");
+            }
+
+            return distance;
+        }
+
+        private string ReturnValidURLOrThrow(string url) {
+            Uri uri;
+
+            try {
+                uri = new Uri(url, UriKind.Absolute);
+            } catch (Exception e) {
+                throw new ArgumentException($"Failed to create a valid URI from context broker URL {url}: {e.Message}");
+            }
+
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) {
+                throw new ArgumentException("The context broker URL must specify HTTP or HTTPS to be valid.");
+            }
+
+            return url;
         }
     }
 }
