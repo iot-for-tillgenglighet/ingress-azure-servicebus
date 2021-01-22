@@ -81,84 +81,93 @@ namespace Ingress.Asb.Worker
             double latitude = Convert.ToDouble(roadAvailabilityModel.Position.Latitude);
             double longitude = Convert.ToDouble(roadAvailabilityModel.Position.Longitude);
 
-            // Get all road segments within a certain distance of the location taken from message body.
-            string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={_maxRoadSegmentDistance}&geometry=Point&coordinates=[{longitude},{latitude}]";
-            
-            var client = _httpClientFactory.CreateClient();
-            var response = await client.GetAsync(newUrl);
+            // We will only send our requests if the position status is NOT zero. If it is zero, we will log a warning instead.
+            if (roadAvailabilityModel.Position.Status != 0) {
 
-            // Create new list to store the roadSegments we get in our response, if the Get is successful.
-            var nearbyRoadSegments = new List<RoadSegment>();
+                // Get all road segments within a certain distance of the location taken from message body.
+                string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={_maxRoadSegmentDistance}&geometry=Point&coordinates=[{longitude},{latitude}]";
+                
+                var client = _httpClientFactory.CreateClient();
+                var response = await client.GetAsync(newUrl);
+
+                // Create new list to store the roadSegments we get in our response, if the Get is successful.
+                var nearbyRoadSegments = new List<RoadSegment>();
  
-            if (response.IsSuccessStatusCode)
-            {
-                string result = response.Content.ReadAsStringAsync().Result;
-                nearbyRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
+                if (response.IsSuccessStatusCode)
+                {
+                    string result = response.Content.ReadAsStringAsync().Result;
+                    nearbyRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
 
-                //Get the surfaceType and Probability from the message.Body
-                var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
-                var surfaceType = Convert.ToString(prediction.TagName).ToLower();
-            
-                //Patch RoadSegments, provided that our list is not empty.
-                if (nearbyRoadSegments.Count > 0) {
-                    int closestSegmentIndex = 0;
+                    //Get the surfaceType and Probability from the message.Body
+                    var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
+                    var surfaceType = Convert.ToString(prediction.TagName).ToLower();
+                
+                    //Patch RoadSegments, provided that our list is not empty.
+                    if (nearbyRoadSegments.Count > 0) {
+                        int closestSegmentIndex = 0;
 
-                    if (nearbyRoadSegments.Count > 1) {
-                        // Find the nearest roadSegment to the location in message. 
-                        double closestSegmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[0], longitude, latitude);
-                        for (int i = 1; i < nearbyRoadSegments.Count; i++) {
-                            double segmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[i], longitude, latitude);
+                        if (nearbyRoadSegments.Count > 1) {
+                            // Find the nearest roadSegment to the location in message. 
+                            double closestSegmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[0], longitude, latitude);
+                            for (int i = 1; i < nearbyRoadSegments.Count; i++) {
+                                double segmentDistance = DistanceToSegmentFromLocation(nearbyRoadSegments[i], longitude, latitude);
 
-                            if (segmentDistance < closestSegmentDistance) {
-                                closestSegmentDistance = segmentDistance;
-                                closestSegmentIndex = i;
+                                if (segmentDistance < closestSegmentDistance) {
+                                    closestSegmentDistance = segmentDistance;
+                                    closestSegmentIndex = i;
+                                }
                             }
+                            _logger.LogInformation($"The closest road Segment is {nearbyRoadSegments[closestSegmentIndex].ID}, with a distance of {closestSegmentDistance} meters.");
                         }
-                        _logger.LogInformation($"The closest road Segment is {nearbyRoadSegments[closestSegmentIndex].ID}, with a distance of {closestSegmentDistance} meters.");
-                    }
 
-                    RoadSegment roadSegment = nearbyRoadSegments[closestSegmentIndex];
-                    string roadSegID = roadSegment.ID;
-                    string patchURL = $"{_contextBrokerURL}/ngsi-ld/v1/entities/{roadSegID}/attrs/";
+                        RoadSegment roadSegment = nearbyRoadSegments[closestSegmentIndex];
+                        string roadSegID = roadSegment.ID;
+                        string patchURL = $"{_contextBrokerURL}/ngsi-ld/v1/entities/{roadSegID}/attrs/";
 
-                    var roadSegmentPatch = new RoadSegment(roadSegID, surfaceType, prediction.Probability);
+                        var roadSegmentPatch = new RoadSegment(roadSegID, surfaceType, prediction.Probability);
 
-                    var settings = new JsonSerializerSettings
-                    {
-                        ContractResolver = new CamelCasePropertyNamesContractResolver(),
-                        NullValueHandling = NullValueHandling.Ignore
-                    };
+                        var settings = new JsonSerializerSettings
+                        {
+                            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                            NullValueHandling = NullValueHandling.Ignore
+                        };
 
-                    var roadSegJson = JsonConvert.SerializeObject(roadSegmentPatch, settings);
-                    var data = new StringContent(roadSegJson, Encoding.UTF8, "application/ld+json");
+                        var roadSegJson = JsonConvert.SerializeObject(roadSegmentPatch, settings);
+                        var data = new StringContent(roadSegJson, Encoding.UTF8, "application/ld+json");
 
-                    var patchResponse = await client.PatchAsync(patchURL, data);
+                        var patchResponse = await client.PatchAsync(patchURL, data);
 
-                    if (patchResponse.IsSuccessStatusCode) {
-                        var stringContent = await patchResponse.Content.ReadAsStringAsync();
-                        _logger.LogInformation(patchResponse.StatusCode + ": " + stringContent);
+                        if (patchResponse.IsSuccessStatusCode) {
+                            var stringContent = await patchResponse.Content.ReadAsStringAsync();
+                            _logger.LogInformation(patchResponse.StatusCode + ": " + stringContent);
+                        } else {
+                            _logger.LogError(
+                                "Failed to patch road segment {RoadSegment}: {StatusCode} {Content}",
+                                roadSegID, patchResponse.StatusCode, patchResponse.Content
+                                );
+                        }
+
                     } else {
-                        _logger.LogError(
-                            "Failed to patch road segment {RoadSegment}: {StatusCode} {Content}",
-                            roadSegID, patchResponse.StatusCode, patchResponse.Content
+                        _logger.LogWarning(
+                            "No road segments found within {Distance}m of ({longitude}, {latitude}).",
+                            _maxRoadSegmentDistance, longitude, latitude
                             );
                     }
-
+                    
+                    // Complete the message so that it is not received again.
+                    // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
+                    await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
                 } else {
                     _logger.LogWarning(
-                        "No road segments found within {Distance}m of ({longitude}, {latitude}).",
-                        _maxRoadSegmentDistance, longitude, latitude
+                        "Failed to retrieve road segments: {StatusCode} {Content}",
+                        response.StatusCode, response.Content
                         );
                 }
-                
-                // Complete the message so that it is not received again.
-                // This can be done only if the subscriptionClient is created in ReceiveMode.PeekLock mode (which is the default).
-                await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
             } else {
                 _logger.LogWarning(
-                    "Failed to retrieve road segments: {StatusCode} {Content}",
-                    response.StatusCode, response.Content
+                    "Message position status is zero. No requests have been sent."
                     );
+                Console.WriteLine("Message position status is zero. No requests have been sent.");
             }
         }
 
