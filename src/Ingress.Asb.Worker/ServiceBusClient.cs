@@ -167,7 +167,7 @@ namespace Ingress.Asb.Worker
                 _logger.LogWarning(
                     "Message position status is zero. No requests have been sent."
                     );
-                Console.WriteLine("Message position status is zero. No requests have been sent.");
+                await _subscriptionClient.CompleteAsync(message.SystemProperties.LockToken);
             }
         }
 
