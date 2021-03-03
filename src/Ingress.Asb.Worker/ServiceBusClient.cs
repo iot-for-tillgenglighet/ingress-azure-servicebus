@@ -36,6 +36,11 @@ namespace Ingress.Asb.Worker
 
             _contextBrokerURL = ReturnValidURLOrThrow(_configuration["CONTEXT_BROKER_URL"]);
             _maxRoadSegmentDistance = ReturnValidSegmentDistanceOrThrow(_configuration["MAX_SEGMENT_DISTANCE"]);
+
+            string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment";
+
+            var client = _httpClientFactory.CreateClient("HttpClientSSLUntrusted");
+            var request = client.GetAsync(newUrl);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -87,8 +92,8 @@ namespace Ingress.Asb.Worker
                 // Get all road segments within a certain distance of the location taken from message body.
                 string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={_maxRoadSegmentDistance}&geometry=Point&coordinates=[{longitude},{latitude}]";
                 
-                var client = _httpClientFactory.CreateClient();
-                var response = await client.GetAsync(newUrl);
+                var client = _httpClientFactory.CreateClient("HttpClientSSLUntrusted");
+                HttpResponseMessage response = await client.GetAsync(newUrl);
 
                 // Create new list to store the roadSegments we get in our response, if the Get is successful.
                 var nearbyRoadSegments = new List<RoadSegment>();

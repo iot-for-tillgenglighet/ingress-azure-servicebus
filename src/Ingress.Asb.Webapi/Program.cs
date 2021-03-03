@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 using System;
+using System.Net.Http;
 
 using Serilog;
 using Serilog.Events;
@@ -21,7 +22,7 @@ namespace Ingress.Asb.Webapi
                 .Enrich.FromLogContext()
                 .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
                 .WriteTo.Console(new RenderedCompactJsonFormatter())
-                .CreateLogger();
+                .CreateLogger();             
 
             try {
                 Log.Information("Starting up ingress-azure-servicebus.");
@@ -52,7 +53,15 @@ namespace Ingress.Asb.Webapi
                 .ConfigureServices(services =>
                 {
                     services.AddHostedService<ServiceBusClient>();
-                    services.AddHttpClient();
+                    services.AddHttpClient("HttpClientSSLUntrusted", client => {
+                    // code to configure headers etc..
+                    }).ConfigurePrimaryHttpMessageHandler(() => {
+                        var handler = new HttpClientHandler();
+                        handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => { return true; };
+                        return handler;
+                    });
                 });
+
+        
     }
 }
