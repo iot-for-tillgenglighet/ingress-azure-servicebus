@@ -36,11 +36,6 @@ namespace Ingress.Asb.Worker
 
             _contextBrokerURL = ReturnValidURLOrThrow(_configuration["CONTEXT_BROKER_URL"]);
             _maxRoadSegmentDistance = ReturnValidSegmentDistanceOrThrow(_configuration["MAX_SEGMENT_DISTANCE"]);
-
-            string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment";
-
-            var client = _httpClientFactory.CreateClient("HttpClientSSLUntrusted");
-            var request = client.GetAsync(newUrl);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -83,11 +78,28 @@ namespace Ingress.Asb.Worker
 
             RoadAvailabilityModel roadAvailabilityModel = JsonConvert.DeserializeObject<RoadAvailabilityModel>(messageJson);
 
+            // Get the latitude and longitude from the message and Convert to Double.
             double latitude = Convert.ToDouble(roadAvailabilityModel.Position.Latitude);
             double longitude = Convert.ToDouble(roadAvailabilityModel.Position.Longitude);
 
             // We will only send our requests if the position status is NOT zero. If it is zero, we will log a warning instead.
             if (roadAvailabilityModel.Position.Status != 0) {
+                
+                // Get the surfaceType and Probability from the message.Body
+                var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
+                var surfaceType = Convert.ToString(prediction.TagName).ToLower();
+
+                // These are the JsonSerializerSettings that will be used for our patch and post requests.
+                var settings = new JsonSerializerSettings
+                {
+                    ContractResolver = new CamelCasePropertyNamesContractResolver(),
+                    NullValueHandling = NullValueHandling.Ignore
+                };
+
+                // Fill out a RoadSurfaceObserved to send after our patch if we have a nearby Road Segment, or on its own if there are no nearby Road Segments
+                RoadSurfaceObserved roadSurfaceObserved = new RoadSurfaceObserved("urn:ngsi-ld:RoadSurfaceObserved:", prediction.TagName, prediction.Probability, latitude, longitude);
+                roadSurfaceObserved.TimeObserved = roadAvailabilityModel.Created;
+                string postURL = $"{_contextBrokerURL}/ngsi-ld/v1/entities";
 
                 // Get all road segments within a certain distance of the location taken from message body.
                 string newUrl = $"{_contextBrokerURL}/ngsi-ld/v1/entities?type=RoadSegment&georel=near;maxDistance=={_maxRoadSegmentDistance}&geometry=Point&coordinates=[{longitude},{latitude}]";
@@ -103,10 +115,6 @@ namespace Ingress.Asb.Worker
                     string result = response.Content.ReadAsStringAsync().Result;
                     nearbyRoadSegments = JsonConvert.DeserializeObject<List<RoadSegment>>(result);
 
-                    //Get the surfaceType and Probability from the message.Body
-                    var prediction = roadAvailabilityModel.Predictions.OrderByDescending(x => x.Probability).First();
-                    var surfaceType = Convert.ToString(prediction.TagName).ToLower();
-                
                     //Patch RoadSegments, provided that our list is not empty.
                     if (nearbyRoadSegments.Count > 0) {
                         int closestSegmentIndex = 0;
@@ -131,12 +139,6 @@ namespace Ingress.Asb.Worker
 
                         var roadSegmentPatch = new RoadSegment(roadSegID, surfaceType, prediction.Probability);
 
-                        var settings = new JsonSerializerSettings
-                        {
-                            ContractResolver = new CamelCasePropertyNamesContractResolver(),
-                            NullValueHandling = NullValueHandling.Ignore
-                        };
-
                         var roadSegJson = JsonConvert.SerializeObject(roadSegmentPatch, settings);
                         var data = new StringContent(roadSegJson, Encoding.UTF8, "application/ld+json");
 
@@ -152,7 +154,38 @@ namespace Ingress.Asb.Worker
                                 );
                         }
 
+                        // Send RoadSurfaceObserved with refRoadSegment
+                        roadSurfaceObserved.refRoadSegmentID = roadSegID;
+                        var roadSurfaceJson = JsonConvert.SerializeObject(roadSurfaceObserved, settings);
+                        var roadSurfaceData = new StringContent(roadSurfaceJson, Encoding.UTF8, "application/ld+json");
+
+                        var postResponse = await client.PostAsync(postURL, roadSurfaceData);
+
+                        if (postResponse.IsSuccessStatusCode) {
+                            var stringContent = await postResponse.Content.ReadAsStringAsync();
+                            _logger.LogInformation(postResponse.StatusCode + ": " + stringContent);
+                        } else {
+                            _logger.LogError(
+                                "Failed to post road surface observed: {StatusCode} {Content}", postResponse.StatusCode, postResponse.Content.ReadAsStringAsync()
+                                );
+                        }
+
                     } else {
+                        // Send RoadSurfaceObserved without refRoadSegment
+                        var roadSurfaceJson = JsonConvert.SerializeObject(roadSurfaceObserved, settings);
+                        var roadSurfaceData = new StringContent(roadSurfaceJson, Encoding.UTF8, "application/ld+json");
+
+                        var postResponse = await client.PostAsync(postURL, roadSurfaceData);
+
+                        if (postResponse.IsSuccessStatusCode) {
+                            var stringContent = await postResponse.Content.ReadAsStringAsync();
+                            _logger.LogInformation(postResponse.StatusCode + ": " + stringContent);
+                        } else {
+                            _logger.LogError(
+                                "Failed to post road surface observed: {StatusCode} {Content}", postResponse.StatusCode, postResponse.Content.ReadAsStringAsync()
+                                );
+                        }
+
                         _logger.LogWarning(
                             "No road segments found within {Distance}m of ({longitude}, {latitude}).",
                             _maxRoadSegmentDistance, longitude, latitude
