@@ -16,7 +16,7 @@ namespace Ingress.Asb.Worker.Models
         public string Type { get; set; }
 
         [JsonProperty("position")]
-        public RoadPosition Position { get; set; }
+        public GeoProperty Position { get; set; }
 
         [JsonProperty("surfaceType")]
         public SurfaceType SurfaceType { get; set; }
@@ -24,28 +24,14 @@ namespace Ingress.Asb.Worker.Models
         [JsonProperty("timeObserved")]
         public DateTimeOffset TimeObserved { get; set; }
 
-        [JsonProperty("refRoadSegmentID")]
-        public string refRoadSegmentID { get; set; }
+        [JsonProperty("refRoadSegment")]
+        public string refRoadSegment { get; set; }
 
-        public RoadSurfaceObserved(string id, string value, double probability, double latitude, double longitude) {
+        public RoadSurfaceObserved(string id, string value, double probability, double[] latitude, double[] longitude) {
             ID = id;
             Type = "RoadSurfaceObserved";
             SurfaceType = new SurfaceType(value, probability);
-            Position = new RoadPosition(latitude, longitude);
-        }
-    }
-
-    public class RoadPosition
-    {
-        [JsonProperty("latitude")]
-        public double Latitude { get; set; }
-
-        [JsonProperty("longitude")]
-        public double Longitude { get; set; }
-        
-        public RoadPosition(double latitude, double longitude) {
-            Latitude = latitude;
-            Longitude = longitude;
+            Position = new GeoProperty(latitude, longitude);
         }
     }
 }

@@ -76,6 +76,5 @@ namespace Ingress.Asb.Worker.Models
             Type = "Point";
             Coordinates = new double[][] { latitude, longitude };
         }
-
     }
 }

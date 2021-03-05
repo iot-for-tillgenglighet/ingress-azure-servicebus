@@ -96,8 +96,15 @@ namespace Ingress.Asb.Worker
                     NullValueHandling = NullValueHandling.Ignore
                 };
 
+                // Put latitude and longitude into their own arrays to fit into RoadSurfaceObserved's GeoJsonProperty
+                var lat = new double[1];
+                lat[0] = latitude;
+
+                var lon = new double[1];
+                lon[0] = longitude;
+
                 // Fill out a RoadSurfaceObserved to send after our patch if we have a nearby Road Segment, or on its own if there are no nearby Road Segments
-                RoadSurfaceObserved roadSurfaceObserved = new RoadSurfaceObserved("urn:ngsi-ld:RoadSurfaceObserved:", prediction.TagName, prediction.Probability, latitude, longitude);
+                RoadSurfaceObserved roadSurfaceObserved = new RoadSurfaceObserved("urn:ngsi-ld:RoadSurfaceObserved:", prediction.TagName, prediction.Probability, lat, lon);
                 roadSurfaceObserved.TimeObserved = roadAvailabilityModel.Created;
                 string postURL = $"{_contextBrokerURL}/ngsi-ld/v1/entities";
 
@@ -155,7 +162,7 @@ namespace Ingress.Asb.Worker
                         }
 
                         // Send RoadSurfaceObserved with refRoadSegment
-                        roadSurfaceObserved.refRoadSegmentID = roadSegID;
+                        roadSurfaceObserved.refRoadSegment = roadSegID;
                         var roadSurfaceJson = JsonConvert.SerializeObject(roadSurfaceObserved, settings);
                         var roadSurfaceData = new StringContent(roadSurfaceJson, Encoding.UTF8, "application/ld+json");
 
