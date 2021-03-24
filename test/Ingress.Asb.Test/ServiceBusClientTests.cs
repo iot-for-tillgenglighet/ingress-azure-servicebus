@@ -68,7 +68,7 @@ namespace Ingress.Asb.Test
             IServiceCollection services = CreateDIServiceCollection();
         
             Mock<HttpMessageHandler> mockHttpMessageHandler = CreateMockedHttpMessageHandler(
-                HttpStatusCode.OK, roadSegments, HttpStatusCode.NoContent, ""
+                HttpStatusCode.OK, roadSegments, HttpStatusCode.NoContent, "", HttpStatusCode.Accepted, ""
                 );
 
             var httpMock = CreateMockedHttpClientFactory(mockHttpMessageHandler.Object);
@@ -136,7 +136,7 @@ namespace Ingress.Asb.Test
             IServiceCollection services = CreateDIServiceCollection();
         
             Mock<HttpMessageHandler> mockHttpMessageHandler = CreateMockedHttpMessageHandler(
-                HttpStatusCode.OK, roadSegments, HttpStatusCode.BadRequest, ""
+                HttpStatusCode.OK, roadSegments, HttpStatusCode.BadRequest, "", HttpStatusCode.Accepted, ""
                 );
             
             var httpMock = CreateMockedHttpClientFactory(mockHttpMessageHandler.Object);
@@ -198,7 +198,7 @@ namespace Ingress.Asb.Test
             return httpMock;
         }
 
-        private static Mock<HttpMessageHandler> CreateMockedHttpMessageHandler(HttpStatusCode code1, string content1, HttpStatusCode code2 = HttpStatusCode.InternalServerError, string content2 = "") {
+        private static Mock<HttpMessageHandler> CreateMockedHttpMessageHandler(HttpStatusCode code1, string content1, HttpStatusCode code2 = HttpStatusCode.InternalServerError, string content2 = "", HttpStatusCode code3 = HttpStatusCode.InternalServerError, string content3 = "") {
             var mockHttpMessageHandler = new Mock<HttpMessageHandler>();
             mockHttpMessageHandler.Protected()
                 .SetupSequence<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
@@ -211,6 +211,11 @@ namespace Ingress.Asb.Test
                 {
                     StatusCode = code2,
                     Content = new StringContent(content2),
+                })
+                .ReturnsAsync(new HttpResponseMessage
+                {
+                    StatusCode = code3,
+                    Content = new StringContent(content3),
                 });
 
             return mockHttpMessageHandler;
